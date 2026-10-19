@@ -1,1 +1,18 @@
 data/*.csv
+en/
+# Python / uv
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.ruff_cache/
+
+# LaTeX
+report/*.aux
+report/*.log
+report/*.out
+report/*.bbl
+report/*.blg
+report/*.fls
+report/*.fdb_latexmk
+report/*.synctex.gz
+report/*.pdf
