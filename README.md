@@ -16,26 +16,28 @@ report/        Informe LaTeX (main.tex, refs.bib)
 
 ## Entorno
 
-Requiere [uv](https://docs.astral.sh/uv/).
+Requiere [uv](https://docs.astral.sh/uv/) y `make`. El informe requiere `pdflatex` y `bibtex`.
 
 ```bash
-uv sync                 # crea .venv e instala dependencias
-uv run jupyter lab      # abrir notebooks
-uv run ruff check .     # lint
+make sync     # crea .venv e instala dependencias
+make lab      # abrir JupyterLab
+make lint     # ruff check
 ```
 
 ## Datos
 
 Taiwanese Bankruptcy Prediction Dataset (UCI #572 / Kaggle `fedesoriano/company-bankruptcy-prediction`).
-Dejar el CSV en `data/` (ignorado por git). Script de descarga: pendiente.
+
+```bash
+make data     # guarda data/taiwanese_bankruptcy.csv (ignorado por git)
+make eda      # ejecuta notebooks/00_EDA.ipynb
+```
 
 ## Informe
 
 ```bash
-cd report && latexmk -pdf main.tex
+make report   # genera report/main.pdf
+make clean    # borra archivos auxiliares de LaTeX
 ```
 
-## Fechas
-
-- Entrega parcial: 2026-10-23
-- Entrega final: 2026-11-20
+`make help` lista todos los objetivos.
