@@ -31,6 +31,7 @@ Taiwanese Bankruptcy Prediction Dataset (UCI #572 / Kaggle `fedesoriano/company-
 ```bash
 make data     # guarda data/taiwanese_bankruptcy.csv (ignorado por git)
 make eda      # ejecuta notebooks/00_EDA.ipynb
+make baselines # ejecuta notebooks/01_baselines.ipynb
 ```
 
 ## Informe
