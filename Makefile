@@ -1,12 +1,17 @@
-.PHONY: help sync data eda lab lint report clean
+.PHONY: help sync data eda baselines lab lint report clean
 
 REPORT_DIR := report
 REPORT := main
+
+# macOS puede marcar como ocultos los .pth del venv y Python los ignora;
+# con PYTHONPATH el paquete inf396 se importa igual.
+export PYTHONPATH := $(CURDIR)/src
 
 help:
 	@echo "make sync    - instalar dependencias (uv sync)"
 	@echo "make data    - descargar el dataset a data/"
 	@echo "make eda     - ejecutar notebooks/00_EDA.ipynb in-place"
+	@echo "make baselines - ejecutar notebooks/01_baselines.ipynb in-place"
 	@echo "make lab     - abrir JupyterLab"
 	@echo "make lint    - ruff check"
 	@echo "make report  - compilar report/main.pdf (pdflatex + bibtex)"
@@ -20,6 +25,9 @@ data: sync
 
 eda: data
 	uv run jupyter nbconvert --to notebook --execute --inplace notebooks/00_EDA.ipynb
+
+baselines: data
+	uv run jupyter nbconvert --to notebook --execute --inplace notebooks/01_baselines.ipynb
 
 lab: sync
 	uv run jupyter lab
