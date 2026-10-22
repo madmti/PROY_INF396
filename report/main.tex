@@ -7,10 +7,14 @@
 \usepackage{amsmath}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{enumitem}
 \usepackage[hidelinks]{hyperref}
 \usepackage[numbers]{natbib}
 
-\graphicspath{{figures/}}
+\graphicspath{{figures/}{../results/figures/}}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\setlength{\emergencystretch}{3em}
 
 \title{Modelos alternativos con menos informaci\'on para la predicci\'on de la quiebra empresarial}
 \author{Tom\'as Molina R. \and Mat\'ias Pe\~naloza B.}
@@ -20,22 +24,123 @@
 \maketitle
 
 \section{Problema y objetivo actualizados}
-% TODO
 
-\section{Descripci\'on de la soluci\'on}
-% TODO: modelos, protocolo, pseudoc\'odigo/diagrama
+\textbf{Problema.} Queremos predecir si una empresa va a quebrar usando 95 razones financieras sacadas de sus estados contables (por ejemplo, cuánta deuda tiene respecto de sus activos o qué tan rentable es). Es un problema de clasificación con dos clases: quiebra o no quiebra.
 
-\section{Plan de implementaci\'on}
-% TODO: trabajo realizado y pendiente
+\textbf{Qué cambió desde la primera entrega.} Antes propusimos superar el 80{,}2\% de accuracy que obtienen Liang et al.\ \citep{liang2016}. Al revisar el paper y los datos vimos que esa comparación no sirve. Ellos usaron 478 empresas, mitad quebradas (239) y mitad sanas (239), pero el dataset público \citep{uci572} tiene 6.819 empresas y solo 220 quiebras (3{,}2\%). Con esos datos, un modelo que siempre responde ``no quiebra'' acierta el 96{,}8\% de las veces sin aprender nada.
+
+Por eso vamos a comparar con medidas que sí sirven con estos datos. En una muestra mitad y mitad, el accuracy del paper es el promedio entre el porcentaje de quiebras detectadas y el de empresas sanas bien clasificadas (por ejemplo, su SVM acierta 79{,}8\% y 78{,}4\%, y su accuracy es 79{,}1\%). A ese promedio le llamamos \emph{accuracy balanceado}. Además usamos los dos errores que reporta el paper: el \emph{error Tipo I} (la empresa quiebra, pero el modelo dijo que estaba sana) y el \emph{error Tipo II} (la empresa estaba sana, pero el modelo dijo que quebraría). El Tipo I es el más grave para un banco.
+
+\textbf{Punto de referencia.} Usando solo razones financieras y sin selección de variables, el SVM lineal del paper logra 79{,}1\% de accuracy, con error Tipo I de 20{,}2\% y Tipo II de 21{,}6\% (Tabla 6 del paper). Si se le aplica selección de variables (Tablas 7 a 9), el accuracy va de 78\% a 80{,}2\%, el Tipo I de 18\% a 21\% y el Tipo II de 19\% a 26\%. Los indicadores de gobierno corporativo que el paper también usa no están en el dataset público, así que quedan fuera.
+
+\textbf{Objetivo.} Comprobar si un modelo de \texttt{scikit-learn}, entrenado con una muestra balanceada como la del paper y solo con razones financieras, logra igualar o superar el accuracy balanceado del SVM de Liang et al.\ (78--80{,}2\%), con un error Tipo I cercano o menor al 20\%. Si no se logra, el objetivo pasa a ser entender por qué y definir qué ajustes probar en la entrega final.
+
+\textbf{Objetivos específicos.}
+\begin{enumerate}[leftmargin=1.5em]
+    \item Hacer el análisis exploratorio de los datos (EDA) y decidir qué preprocesamiento necesitan.
+    \item Entrenar modelos con muestras balanceadas (regresión logística con regularización, KNN y SVM lineal) y medir accuracy balanceado, error Tipo I y error Tipo II.
+    \item Comparar con el paper y, si quedamos por debajo, proponer ajustes para la entrega final.
+\end{enumerate}
+
+\section{Descripción de la solución}
+
+Seguimos cinco pasos:
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{EDA.} Revisar cómo se distribuye cada razón, cuáles están más relacionadas entre sí, si hay valores extremos y si alguna variable es constante.
+    \item \textbf{Preprocesamiento.} Sacar las variables sin información, recortar los valores extremos y estandarizar (poner las variables en una escala comparable), porque la regresión logística, el KNN y el SVM se afectan por la escala.
+    \item \textbf{Muestra balanceada.} Tomar las 220 empresas en quiebra y 220 sanas elegidas al azar. Repetimos esto 10 veces con distintas empresas sanas para ver cuánto cambia el resultado.
+    \item \textbf{Modelos.} Regresión logística con regularización (L2 y L1/lasso), KNN con $K=7$ y SVM lineal. Los dos últimos usan lo que indica el paper (K=7 y kernel lineal); el resto de sus parámetros queda en los valores por defecto de \texttt{scikit-learn}, incluyendo $C=1$ en el SVM, que el paper no reporta. En la regresión logística, la fuerza de la regularización se elige automáticamente con validación cruzada entre 5 valores de $C$.
+    \item \textbf{Evaluación.} Validación cruzada de 10 folds, como en el paper, midiendo accuracy balanceado, error Tipo I y error Tipo II.
+\end{enumerate}
+
+\textbf{Por qué estos modelos.} Tenemos 94 variables útiles y solo 220 casos de quiebra, así que el riesgo es que el modelo se aprenda los datos de entrenamiento. La regularización frena eso, y el lasso además deja en cero las variables poco útiles, lo que cumple la tarea de selección de variables que el paper hizo con cinco métodos distintos. KNN y SVM se incluyen porque aparecen en el paper y permiten comprobar que nuestros resultados son razonables.
+
+\begin{verbatim}
+repetir 10 veces:
+    muestra = 220 quiebras + 220 sanas al azar
+    para cada modelo en {LogReg L2, LogReg L1, KNN, SVM lineal}:
+        validación cruzada de 10 folds sobre la muestra:
+            recortar y estandarizar (ajustado solo con el fold de entrenamiento)
+            entrenar el modelo
+            medir accuracy balanceado, Tipo I y Tipo II en el fold de prueba
+promediar y comparar con el paper (78-80%, Tipo I cerca de 20%)
+\end{verbatim}
+
+\textbf{Si no alcanzamos el accuracy del paper.} Revisaremos primero el preprocesamiento (variables muy asimétricas, valores extremos) y luego probaremos otros modelos, como LDA/QDA o una red neuronal \textit{feedforward}. En la entrega final, si el modelo funciona con la muestra balanceada, lo probaremos también con los 6.819 datos reales, usando medidas que sirvan con clases desbalanceadas.
+
+\section{Plan de implementación}
+
+\textbf{Hecho.} Carga y EDA de los datos; preprocesamiento dentro de la validación cruzada; muestras balanceadas; entrenamiento y evaluación de los cuatro modelos; revisiones del resultado.
+
+\textbf{Pendiente para la entrega final.}
+\begin{itemize}[leftmargin=1.5em]
+    \item Probar con los 6.819 datos reales (sin balancear), midiendo con ROC-AUC, F1, precisión y recall de la clase quiebra.
+    \item Ver qué variables elige el lasso y compararlas con las que destaca el paper.
+    \item Probar LDA/QDA y una red neuronal \textit{feedforward}.
+    \item Estimar la incertidumbre de los resultados con bootstrap.
+    \item Escribir el informe final.
+\end{itemize}
 
 \section{Dataset y preprocesamiento}
-% TODO
+
+\textbf{Datos.} Usamos el dataset público ``Taiwanese Bankruptcy Prediction'' (UCI y Kaggle) \citep{uci572}, que viene de la misma fuente que el estudio de Liang et al.\ (empresas taiwanesas entre 1999 y 2009): 6.819 empresas, 95 razones financieras y una etiqueta de quiebra. No es exactamente la misma muestra del paper, que tiene 239 quiebras y el dataset público 220. Solo el 3{,}23\% de las empresas quebró. No hay valores nulos ni filas duplicadas; 93 variables son decimales y 2 son enteras.
+
+\textbf{Qué vimos en el EDA.}
+\begin{itemize}[leftmargin=1.5em]
+    \item \texttt{Net Income Flag} es constante (no aporta información) y \texttt{Liability-Assets Flag} es binaria.
+    \item 73 de las 95 variables son muy asimétricas ($|\text{skew}|>2$), porque unos pocos valores son enormes (por ejemplo, hasta $2{,}75\times10^9$ en \texttt{Current Ratio}). Con ellos, los histogramas quedan inservibles.
+    \item Hay 23 pares de variables casi idénticas ($|r|>0{,}95$), como los tres ROA, y \texttt{Debt ratio \%} con \texttt{Net worth/Assets} tienen correlación $-1$.
+    \item Las variables más relacionadas con la quiebra son las de rentabilidad (\texttt{Net Income to Total Assets}, $r=-0{,}32$; \texttt{ROA(A)}, $-0{,}28$) y de deuda (\texttt{Debt ratio \%}, $+0{,}25$), lo que coincide con el paper.
+    \item En el PCA, los dos primeros ejes explican solo el 20\% de la variación. Las quiebras se ubican algo más hacia valores bajos del primer eje, pero se mezclan con las sanas, es decir, no hay una separación clara.
+\end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\linewidth]{eda_corr_top10.png}\hfill
+\includegraphics[width=0.48\linewidth]{eda_pca.png}
+\caption{Izquierda: correlación entre las 10 variables más relacionadas con la quiebra. Derecha: PCA de las 94 variables; las quiebras (azul) se mezclan con las sanas (gris).}
+\end{figure}
+
+\textbf{Preprocesamiento.} (1) Eliminamos la variable constante. (2) Recortamos cada variable entre sus percentiles 1 y 99, lo que bajó de 73 a 40 las variables muy asimétricas. (3) Estandarizamos, para que ninguna variable pese más por su escala. Los pasos 2 y 3 se calculan solo con los datos de entrenamiento de cada fold, para no usar información del conjunto de prueba.
 
 \section{Experimentos preliminares}
-% TODO: m\'etricas (Accuracy, F1, AUC-ROC, recall de quiebra, error Tipo I/II)
+
+\textbf{Qué hicimos.} Tal como en la sección 2: 10 muestras balanceadas (220 quiebras y 220 sanas distintas en cada una), validación cruzada de 10 folds y cuatro modelos de \texttt{scikit-learn}. Como las muestras son balanceadas, usamos accuracy balanceado y errores Tipo I y II; F1, ROC-AUC y precisión solo tienen sentido con la proporción real de quiebras, y los dejamos para la prueba con todos los datos. La Tabla~\ref{tab:res} muestra el promedio y la desviación estándar entre las 10 repeticiones.
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Modelo} & \textbf{Accuracy balanceado (\%)} & \textbf{Tipo I (\%)} & \textbf{Tipo II (\%)} \\
+\midrule
+Regresión logística L2 & 85{,}6 $\pm$ 1{,}5 & 13{,}9 $\pm$ 2{,}0 & 14{,}8 $\pm$ 2{,}0 \\
+Regresión logística L1 (lasso) & 85{,}4 $\pm$ 1{,}7 & 14{,}9 $\pm$ 1{,}9 & 14{,}4 $\pm$ 2{,}4 \\
+KNN ($K=7$) & 84{,}2 $\pm$ 1{,}8 & 18{,}0 $\pm$ 1{,}6 & 13{,}5 $\pm$ 3{,}4 \\
+SVM lineal & 84{,}0 $\pm$ 1{,}9 & 16{,}2 $\pm$ 1{,}7 & 15{,}8 $\pm$ 2{,}6 \\
+\midrule
+SVM lineal del paper (Liang et al.) & 78 -- 80{,}2 & 18 -- 21 & 19 -- 26 \\
+\bottomrule
+\end{tabular}
+\caption{Resultados con muestra balanceada y solo razones financieras.}
+\label{tab:res}
+\end{table}
+
+\textbf{Resultado.} Los cuatro modelos quedan sobre el rango del paper en accuracy balanceado (84 a 85{,}6\% contra 78 a 80{,}2\%) y con menos errores Tipo I y Tipo II. Las regresiones logísticas (L2 y L1) quedan algo por encima de KNN y SVM, pero la diferencia entre los cuatro modelos es parecida a la variación entre repeticiones (1{,}5 a 1{,}9 puntos), así que no podemos decir que alguno sea claramente mejor. Con esto se cumple el objetivo de igualar o superar el accuracy del SVM del paper.
+
+\textbf{Revisiones.} Como el resultado fue mejor de lo esperado, hicimos tres comprobaciones. No hay filas duplicadas. En una de las muestras, con las etiquetas mezcladas al azar, el accuracy baja a cerca de 50\% en los cuatro modelos (48 a 52\%), así que el proceso no filtra información del conjunto de prueba. Y usando solo min-max, como el paper (promedio de 3 repeticiones), la regresión logística queda en 85 a 86\% y el SVM sube de 83{,}9\% a 85{,}8\%, una diferencia dentro de la variación entre repeticiones; solo KNN cambia mucho, bajando de 84{,}8\% a 80{,}5\%. Por lo tanto, el preprocesamiento no explica la diferencia con el paper.
+
+\textbf{Cómo interpretamos esto.} No afirmamos que superamos al paper, porque la muestra es distinta. Liang et al.\ eligieron empresas sanas de tamaño e industria parecidos a las quebradas; nosotros tomamos sanas al azar, y creemos que esa es la razón más probable de que nuestro problema sea más fácil. No podemos comprobarlo porque el dataset no trae tamaño ni industria. Además, el dataset no identifica a las empresas, así que no podemos descartar que una misma empresa aparezca en varios años y quede repartida entre entrenamiento y prueba. Por último, la desviación de 1 a 2 puntos entre repeticiones subestima la incertidumbre, porque todas usan las mismas 220 quiebras.
 
 \section{Riesgos y ajustes al plan}
-% TODO
+
+\begin{itemize}[leftmargin=1.5em]
+    \item \textit{Muestra distinta a la del paper.} La comparación no es directa.
+    \item \textit{Falsas alarmas con la proporción real.} Con un error Tipo II de cerca de 15\% sobre unas 6.600 empresas sanas, habría unas 970 falsas alarmas frente a unas 190 quiebras detectadas, es decir, solo cerca de 1 de cada 6 alertas sería correcta. Por eso la prueba con todos los datos es prioritaria, y ajustaremos el umbral de decisión.
+    \item \textit{Posibles empresas repetidas.} No hay forma de comprobarlo con estos datos, por lo que es una limitación.
+    \item \textit{Tiempo.} Si falta, dejaremos la red neuronal como trabajo futuro y priorizaremos la prueba con todos los datos.
+\end{itemize}
 
 \nocite{liang2016,uci572}
 \bibliographystyle{plainnat}
